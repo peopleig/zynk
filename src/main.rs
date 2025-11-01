@@ -1,15 +1,15 @@
 use input_handler::InputHandler;
-use kvcrdt::engine::kv::LsmEngine;
+use zynk::engine::kv::LsmEngine;
 use std::path::PathBuf;
 
 fn main() {
-    let mut engine = LsmEngine::new("data", 64 * 1024, 8 * 1024).expect("engine");
+    let mut engine = LsmEngine::new_with_manifest("data", 64 * 1024, 8 * 1024).expect("engine");
 
     let mut ih = InputHandler::with_history_file(PathBuf::from("data/history")).expect("input");
 
-    println!("kvcrdt LSM KV. Commands: put/get/del/flush/exit");
+    println!("Zynk LSM KV. Commands: put/get/del/flush/exit");
 
-    while let Ok(line) = ih.readline("kv> ") {
+    while let Ok(line) = ih.readline("zynk> ") {
         let line = line.trim();
         if line.is_empty() {
             continue;
