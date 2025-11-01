@@ -81,3 +81,79 @@ impl CRDT for GSet {
         self.elems = out;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn b(v: &str) -> Vec<u8> { v.as_bytes().to_vec() }
+
+    // Basic union test
+    #[test]
+    fn merge_union_basic() {
+        let mut g1 = GSet::new();
+        g1.insert(b("a"));
+        g1.insert(b("b"));
+
+        let mut g2 = GSet::new();
+        g2.insert(b("b"));
+        g2.insert(b("c"));
+
+        g1.merge(&g2);
+
+        let expected = vec![b("a"), b("b"), b("c")];
+        assert_eq!(g1.elements(), expected);
+    }
+
+    //Serialize, deserialize, merge
+    #[test]
+    fn merge_from_serialized_blobs() {
+        let mut local = GSet::new();
+        local.insert(b("alpha"));
+        local.insert(b("beta"));
+
+        let mut remote = GSet::new();
+        remote.insert(b("beta"));
+        remote.insert(b("gamma"));
+
+        println!("Local before merge: {:?}",local.elements().iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>());
+        println!("Remote before merge: {:?}", remote.elements().iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>());
+
+        let remote_bytes = remote.to_bytes();
+        println!("Remote serialized bytes (hex): {}", hex::encode(&remote_bytes));
+
+        let remote_deser = GSet::from_bytes(&remote_bytes);
+        println!("Remote deserialized: {:?}", remote_deser.elements().iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>());
+
+        local.merge(&remote_deser);
+        println!("Local after merge: {:?}", local.elements().iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>());
+
+        let expected = vec![b("alpha"), b("beta"), b("gamma")];
+        assert_eq!(local.elements(), expected);
+    }
+
+    //malformed input: unsorted elements and duplicates
+    #[test]
+    fn merge_handles_unsorted_and_duplicates_in_bytes() {
+        let mut blob = Vec::new();
+        // count = 4
+        blob.extend(&(4u32.to_be_bytes()));
+        // "z"
+        blob.extend(&(1u32.to_be_bytes())); blob.extend(b"z");
+        // "a"
+        blob.extend(&(1u32.to_be_bytes())); blob.extend(b"a");
+        // "a" duplicate
+        blob.extend(&(1u32.to_be_bytes())); blob.extend(b"a");
+        // "m"
+        blob.extend(&(1u32.to_be_bytes())); blob.extend(b"m");
+
+        let mut local = GSet::new();
+        local.insert(b("b"));
+        local.insert(b("m"));
+
+        let remote = GSet::from_bytes(&blob);
+        assert_eq!(remote.elements(), vec![b("a"), b("m"), b("z")]);
+        local.merge(&remote);
+        assert_eq!(local.elements(), vec![b("a"), b("b"), b("m"), b("z")]);
+    }
+}
