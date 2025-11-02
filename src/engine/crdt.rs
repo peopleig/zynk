@@ -157,3 +157,172 @@ mod tests {
         assert_eq!(local.elements(), vec![b("a"), b("b"), b("m"), b("z")]);
     }
 }
+
+use std::collections::{BTreeMap, VecDeque};
+use std::cmp::Ordering;
+
+/// Unique identifier for an RGA element: (actor, counter)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ElementId {
+    pub actor: u64,
+    pub counter: u64,
+}
+
+impl ElementId {
+    pub fn new(actor: u64, counter: u64) -> Self { Self { actor, counter } }
+
+    fn to_bytes(&self, out: &mut Vec<u8>) {
+        out.extend(&self.actor.to_be_bytes());
+        out.extend(&self.counter.to_be_bytes());
+    }
+
+    fn from_bytes(bs: &[u8]) -> Option<(Self, usize)> {
+        if bs.len() < 16 { return None; }
+        let actor = u64::from_be_bytes(bs[0..8].try_into().unwrap());
+        let counter = u64::from_be_bytes(bs[8..16].try_into().unwrap());
+        Some((ElementId { actor, counter }, 16))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Element {
+    pub id: ElementId,
+    pub prev: Option<ElementId>,
+    pub value: Vec<u8>,
+    pub deleted: bool,
+}
+
+impl Element {
+    fn to_bytes(&self, out: &mut Vec<u8>) {
+        self.id.to_bytes(out);
+        match &self.prev {
+            Some(pid) => { out.push(1); pid.to_bytes(out); }
+            None => { out.push(0); }
+        }
+        out.extend(&(self.value.len() as u32).to_be_bytes());
+        out.extend(&self.value);
+        out.push(if self.deleted { 1 } else { 0 });
+    }
+
+    fn from_bytes(bs: &[u8]) -> Option<(Self, usize)> {
+        let mut i = 0usize;
+        let (id, n) = ElementId::from_bytes(&bs[i..])?; i += n;
+        if i >= bs.len() { return None; }
+        let has_prev = bs[i] == 1; i += 1;
+        let prev = if has_prev {
+            let (pid, m) = ElementId::from_bytes(&bs[i..])?; i += m;
+            Some(pid)
+        } else { None };
+        if i + 4 > bs.len() { return None; }
+        let vlen = u32::from_be_bytes(bs[i..i+4].try_into().unwrap()) as usize; i += 4;
+        if i + vlen > bs.len() { return None; }
+        let value = bs[i..i+vlen].to_vec(); i += vlen;
+        if i >= bs.len() { return None; }
+        let deleted = bs[i] != 0; i += 1;
+        Some((Element { id, prev, value, deleted }, i))
+    }
+}
+
+/// State-based RGA: map ElementId -> Element
+#[derive(Debug, Clone)]
+pub struct Rga {
+    pub elems: BTreeMap<ElementId, Element>,
+}
+
+impl Rga {
+    pub fn new() -> Self { Self { elems: BTreeMap::new() } }
+
+    pub fn insert(&mut self, id: ElementId, prev: Option<ElementId>, value: Vec<u8>) {
+        self.elems.entry(id).or_insert(Element {
+            id,
+            prev,
+            value,
+            deleted: false,
+        });
+    }
+
+    pub fn delete(&mut self, id: ElementId) {
+        if let Some(e) = self.elems.get_mut(&id) {
+            e.deleted = true;
+        } else {
+            self.elems.insert(id, Element { id, prev: None, value: Vec::new(), deleted: true });
+        }
+    }
+
+    pub fn visible_sequence(&self) -> Vec<Vec<u8>> {
+        let mut children: BTreeMap<Option<ElementId>, Vec<ElementId>> = BTreeMap::new();
+        for (id, elem) in &self.elems {
+            children.entry(elem.prev).or_default().push(*id);
+        }
+        for vec in children.values_mut() {
+            vec.sort();
+        }
+
+        let mut out = Vec::new();
+        let mut q = VecDeque::new();
+        if let Some(heads) = children.get(&None) {
+            for id in heads { q.push_back(*id); }
+        }
+        while let Some(curr_id) = q.pop_front() {
+            if let Some(elem) = self.elems.get(&curr_id) {
+                if !elem.deleted {
+                    out.push(elem.value.clone());
+                }
+                if let Some(kids) = children.get(&Some(curr_id)) {
+                    for kid in kids { q.push_back(*kid); }
+                }
+            }
+        }
+        out
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        for (id, other_elem) in &other.elems {
+            match self.elems.get_mut(id) {
+                Some(local) => {
+                    // merge tombstone and keep existing value if present and if local lacks value but other has one, take it.
+                    local.deleted = local.deleted || other_elem.deleted;
+                    if local.value.is_empty() && !other_elem.value.is_empty() {
+                        local.value = other_elem.value.clone();
+                    }
+                    if local.prev.is_none() && other_elem.prev.is_some() {
+                        local.prev = other_elem.prev;
+                    }
+                }
+                None => {
+                    self.elems.insert(*id, other_elem.clone());
+                }
+            }
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend(&(self.elems.len() as u32).to_be_bytes());
+        for elem in self.elems.values() {
+            elem.to_bytes(&mut out);
+        }
+        out
+    }
+
+    pub fn from_bytes(bs: &[u8]) -> Self {
+        let mut i = 0usize;
+        if bs.len() < 4 { return Rga::new(); }
+        let count = u32::from_be_bytes(bs[i..i+4].try_into().unwrap()) as usize; i += 4;
+        let mut elems = BTreeMap::new();
+        for _ in 0..count {
+            if i >= bs.len() { break; }
+            if let Some((elem, n)) = Element::from_bytes(&bs[i..]) {
+                elems.insert(elem.id, elem);
+                i += n;
+            } else { break; }
+        }
+        Rga { elems }
+    }
+}
+
+impl CRDT for Rga {
+    fn to_bytes(&self) -> Vec<u8> { self.to_bytes() }
+    fn from_bytes(bytes: &[u8]) -> Self { Rga::from_bytes(bytes) }
+    fn merge(&mut self, other: &Self) { self.merge(other) }
+}

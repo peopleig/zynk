@@ -1,6 +1,9 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::fs;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
 use zynk::engine::kv::LsmEngine;
@@ -48,6 +51,20 @@ impl Kv for KvSvc {
     }
 }
 
+fn get_or_create_actor_id(data_dir: &PathBuf) -> std::io::Result<u64> {
+    let id_path = data_dir.join("actor_id");
+    if id_path.exists() {
+        let s = fs::read_to_string(&id_path)?;
+        if let Ok(id) = s.trim().parse::<u64>() {
+            return Ok(id);
+        }
+    }
+    use rand::{Rng, thread_rng};
+    let id: u64 = thread_rng().gen();
+    fs::write(&id_path, id.to_string())?;
+    Ok(id)
+}
+
 fn to_status(e: std::io::Error) -> Status {
     Status::internal(e.to_string())
 }
@@ -63,15 +80,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let data_dir = PathBuf::from(std::env::var("DATA_DIR").unwrap_or_else(|_| "/data".to_string()));
     let node_id = std::env::var("NODE_ID").unwrap_or_else(|_| "node-unknown".to_string());
-    let engine = LsmEngine::new_with_manifest(&data_dir, 64 * 1024, 8 * 1024)?;
+   
+    // derive actor id for this node:
+    let actor_id = get_or_create_actor_id(&data_dir)?;
+
+    let engine = LsmEngine::new_with_manifest_and_actor(&data_dir, 64 * 1024, 8 * 1024, actor_id)?;
     let svc = KvSvc {
         engine: Arc::new(RwLock::new(engine)),
     };
 
     println!(
-        "zynkd listening on {} (NODE_ID={}, DATA_DIR={})",
+        "zynkd listening on {} (ACTOR_ID={}, DATA_DIR={})",
         addr,
-        node_id,
+        actor_id,
         data_dir.display()
     );
     tonic::transport::Server::builder()

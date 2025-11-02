@@ -1,6 +1,7 @@
 use input_handler::InputHandler;
 use std::path::PathBuf;
 use zynk::engine::kv::LsmEngine;
+use zynk::engine::crdt::ElementId;
 
 fn main() {
     let mut engine = LsmEngine::new_with_manifest("data", 64 * 1024, 8 * 1024).expect("engine");
@@ -144,6 +145,152 @@ fn main() {
                     Err(e) => println!("error: {e}"),
                 }
             }
+
+            "rga_insert" => {
+                let k = match parts.next() {
+                    Some(s) => s.as_bytes(),
+                    None => {
+                        println!("usage: rga_insert <key> <value>");
+                        continue;
+                    }
+                };
+                let v = match parts.next() {
+                    Some(s) => s.as_bytes().to_vec(),
+                    None => {
+                        println!("usage: rga_insert <key> <value>");
+                        continue;
+                    }
+                };
+                let id = engine.next_element_id();
+                println!("Generated actor id: {}", engine.actor_id);
+                println!("Generated counter id: {}", id.counter);
+                if let Err(e) = engine.rga_insert_after(k, None, v, engine.actor_id, id.counter) {
+                    println!("error: {e}");
+                } else {
+                    println!("OK (id = actor:{} counter:{})", id.actor, id.counter);
+                }
+            }
+            
+            "rga_insert_after" => {
+                let k = match parts.next() {
+                    Some(s) => s.as_bytes(),
+                    None => {
+                        println!("usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>");
+                        continue;
+                    }
+                };
+                let prev_actor = match parts.next() {
+                    Some(s) => match s.parse::<u64>() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            println!("invalid prev_actor");
+                            continue;
+                        }
+                    },
+                    None => {
+                        println!("usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>");
+                        continue;
+                    }
+                };
+                let prev_counter = match parts.next() {
+                    Some(s) => match s.parse::<u64>() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            println!("invalid prev_counter");
+                            continue;
+                        }
+                    },
+                    None => {
+                        println!("usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>");
+                        continue;
+                    }
+                };
+                let value = match parts.next() {
+                    Some(s) => s.as_bytes().to_vec(),
+                    None => {
+                        println!("missing <value>");
+                        continue;
+                    }
+                };
+            
+                let prev = Some(ElementId { actor: prev_actor, counter: prev_counter });
+                let id = engine.next_element_id();
+            
+                if let Err(e) = engine.rga_insert_after(k, prev, value, engine.actor_id, id.counter) {
+                    println!("error: {e}");
+                } else {
+                    println!("OK (id = actor:{} counter:{})", id.actor, id.counter);
+                }
+            }
+            
+            "rga_delete" => {
+                let k = match parts.next() {
+                    Some(s) => s.as_bytes(),
+                    None => {
+                        println!("usage: rga_delete <key> <actor> <counter>");
+                        continue;
+                    }
+                };
+                let actor = match parts.next() {
+                    Some(s) => match s.parse::<u64>() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            println!("invalid actor id");
+                            continue;
+                        }
+                    },
+                    None => {
+                        println!("usage: rga_delete <key> <actor> <counter>");
+                        continue;
+                    }
+                };
+                let counter = match parts.next() {
+                    Some(s) => match s.parse::<u64>() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            println!("invalid counter");
+                            continue;
+                        }
+                    },
+                    None => {
+                        println!("usage: rga_delete <key> <actor> <counter>");
+                        continue;
+                    }
+                };
+            
+                let id = ElementId { actor, counter };
+                if let Err(e) = engine.rga_delete(k, id) {
+                    println!("error: {e}");
+                } else {
+                    println!("OK (deleted id = actor:{} counter:{})", actor, counter);
+                }
+            }
+            
+            "rga_show" => {
+                let k = match parts.next() {
+                    Some(s) => s.as_bytes(),
+                    None => {
+                        println!("usage: rga_show <key>");
+                        continue;
+                    }
+                };
+                match engine.rga_get_visible(k) {
+                    Ok(vs) => {
+                        if vs.is_empty() {
+                            println!("(empty)");
+                        } else {
+                            for v in vs {
+                                match std::str::from_utf8(&v) {
+                                    Ok(s) => println!("{s}"),
+                                    Err(_) => println!("0x{}", hex::encode(v)),
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => println!("error: {e}"),
+                }
+            }
+
 
         
             "exit" | "quit" => {

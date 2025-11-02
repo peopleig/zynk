@@ -1,8 +1,10 @@
 use crate::storage::manifest::{Manifest, fsync_dir, open_manifest_append, read_current_or_init};
 use crate::storage::memtable::{Entry, MemTable, MemTableSet, flush_memtable_to_sstable};
 use crate::storage::sstable::{TableId, reader::SsTableReader};
+use std::sync::atomic::{AtomicU64, Ordering};
+use crate::engine::crdt::{Rga,ElementId};
 use std::fs;
-use std::io::Result;
+use std::io::Result as IoResult;
 use std::path::{Path, PathBuf};
 
 pub struct LsmEngine {
@@ -10,6 +12,8 @@ pub struct LsmEngine {
     memtables: MemTableSet,
     sstables: Vec<(TableId, PathBuf, SsTableReader)>,
     block_bytes: usize,
+    pub actor_id: u64,
+    local_counter: AtomicU64,
     next_table_id: TableId,
     manifest: Manifest,
 }
@@ -30,6 +34,8 @@ impl LsmEngine {
             memtables,
             sstables: Vec::new(),
             block_bytes,
+            actor_id: 0,
+            local_counter: AtomicU64::new(0),
             next_table_id: 1,
             manifest,
         })
@@ -64,9 +70,29 @@ impl LsmEngine {
             memtables,
             sstables,
             block_bytes,
+            actor_id: 0,
+            local_counter: AtomicU64::new(0),
             next_table_id,
             manifest,
         })
+    }
+
+    pub fn new_with_manifest_and_actor(
+        data_dir: &std::path::Path,
+        memtable_size: usize,
+        block_size: usize,
+        actor_id: u64,
+    ) -> std::io::Result<Self> {
+        let mut eng = Self::new_with_manifest(data_dir, memtable_size, block_size)?;
+        eng.actor_id = actor_id;
+        eng.local_counter = AtomicU64::new(1);
+        Ok(eng)
+    }
+
+    /// Generate a fresh ElementId for local inserts.
+    pub fn next_element_id(&self) -> ElementId {
+        let ctr = self.local_counter.fetch_add(1, Ordering::SeqCst);
+        ElementId::new(self.actor_id, ctr)
     }
 
     pub fn put(&mut self, key: &[u8], value: &[u8]) -> std::io::Result<()> {
@@ -164,7 +190,46 @@ impl LsmEngine {
         Ok(result.elements())
     }
 
-    fn flush_immutable(&mut self, frozen: MemTable) -> Result<()> {
+    pub fn rga_insert_after(
+        &mut self,
+        key: &[u8],
+        prev: Option<ElementId>,
+        value: Vec<u8>,
+        actor_id: u64,
+        counter: u64,
+    ) -> std::io::Result<()> {
+        let mut rga = match self.get(key)? {
+            Some(bs) => Rga::from_bytes(&bs),
+            None => Rga::new(),
+        };
+        let id = ElementId::new(actor_id, counter);
+        rga.insert(id, prev, value);
+        let bytes = rga.to_bytes();
+        self.put(key, &bytes)
+    }
+
+    pub fn rga_delete(&mut self, key: &[u8], id: ElementId) -> std::io::Result<()> {
+        let mut rga = match self.get(key)? {
+            Some(bs) => Rga::from_bytes(&bs),
+            None => return Ok(()), // kuch nai hein delete karne ko
+        };
+        rga.delete(id);
+        self.put(key, &rga.to_bytes())
+    }
+
+    pub fn rga_get_visible(&self, key: &[u8]) -> std::io::Result<Vec<Vec<u8>>> {
+        match self.get(key)? {
+            Some(bs) => {
+                let rga = Rga::from_bytes(&bs);
+                Ok(rga.visible_sequence())
+            }
+            None => Ok(vec![]),
+        }
+    }
+
+
+
+    fn flush_immutable(&mut self, frozen: MemTable) -> Result<(), std::io::Error> {
         let id = self.alloc_table_id();
         let tmp = self.sst_tmp_path(id);
         let final_path = self.sst_final_path(id);
