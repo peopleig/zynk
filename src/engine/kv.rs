@@ -202,11 +202,32 @@ impl LsmEngine {
             Some(bs) => Rga::from_bytes(&bs),
             None => Rga::new(),
         };
+
         let id = ElementId::new(actor_id, counter);
-        rga.insert(id, prev, value);
+        rga.insert(id, prev, value.clone());
+    
+        // println!(
+        //     "RGA INSERT -> key={}, id=({}:{}) prev={:?} value='{}'",
+        //     String::from_utf8_lossy(key),
+        //     actor_id,
+        //     counter,
+        //     prev,
+        //     String::from_utf8_lossy(&value)
+        // );
+
+        // println!(
+        //     "Current sequence for '{}': {:?}",
+        //     String::from_utf8_lossy(key),
+        //     rga.visible_sequence()
+        //         .iter()
+        //         .map(|v| String::from_utf8_lossy(v).to_string())
+        //         .collect::<Vec<_>>()
+        // );
+
         let bytes = rga.to_bytes();
         self.put(key, &bytes)
     }
+
 
     pub fn rga_delete(&mut self, key: &[u8], id: ElementId) -> std::io::Result<()> {
         let mut rga = match self.get(key)? {

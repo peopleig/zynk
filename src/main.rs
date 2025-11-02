@@ -15,32 +15,29 @@ fn main() {
         if line.is_empty() {
             continue;
         }
-        let mut parts = line.splitn(3, ' ');
-        let cmd = parts.next().unwrap().to_lowercase();
+        let mut cmd_iter = line.split_whitespace();
+        let cmd = match cmd_iter.next() {
+            Some(c) => c.to_lowercase(),
+            None => continue,
+        };
         match cmd.as_str() {
             "put" => {
+                let mut parts = line.splitn(3, ' ');
+                parts.next(); // command
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
-                    None => {
-                        println!("usage: put <key> <value>");
-                        continue;
-                    }
+                    None => { println!("usage: put <key> <value>"); continue; }
                 };
                 let v = match parts.next() {
                     Some(s) => s.as_bytes(),
-                    None => {
-                        println!("usage: put <key> <value>");
-                        continue;
-                    }
+                    None => { println!("usage: put <key> <value>"); continue; }
                 };
-                if let Err(e) = engine.put(k, v) {
-                    println!("error: {e}");
-                } else {
-                    println!("OK");
-                }
+                if let Err(e) = engine.put(k, v) { println!("error: {e}"); } else { println!("OK"); }
             }
         
             "get" => {
+                let mut parts = line.split_whitespace();
+                parts.next();
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
                     None => {
@@ -59,6 +56,8 @@ fn main() {
             }
         
             "del" | "delete" => {
+                let mut parts = line.split_whitespace();
+                parts.next();
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
                     None => {
@@ -74,6 +73,8 @@ fn main() {
             }
         
             "flush" => {
+                let mut parts = line.split_whitespace();
+                parts.next();
                 if let Err(e) = engine.flush() {
                     println!("error: {e}");
                 } else {
@@ -82,6 +83,8 @@ fn main() {
             }
 
             "gput" => {
+                let mut parts = line.splitn(3, ' ');
+                parts.next();
                 let k = match parts.next() {
                     Some(s) => s.as_bytes().to_vec(),
                     None => {
@@ -104,6 +107,8 @@ fn main() {
             }
 
             "gget" => {
+                let mut parts = line.split_whitespace();
+                parts.next();
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
                     None => {
@@ -129,6 +134,8 @@ fn main() {
             }
 
             "ggetraw" => {
+                let mut parts = line.split_whitespace();
+                parts.next();
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
                     None => {
@@ -147,6 +154,8 @@ fn main() {
             }
 
             "rga_insert" => {
+                let mut parts = line.splitn(3, ' ');
+                parts.next();
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
                     None => {
@@ -172,14 +181,16 @@ fn main() {
             }
             
             "rga_insert_after" => {
-                let k = match parts.next() {
+                let mut toks = line.split_whitespace();
+                toks.next();
+                let k = match toks.next() {
                     Some(s) => s.as_bytes(),
                     None => {
                         println!("usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>");
                         continue;
                     }
                 };
-                let prev_actor = match parts.next() {
+                let prev_actor = match toks.next() {
                     Some(s) => match s.parse::<u64>() {
                         Ok(v) => v,
                         Err(_) => {
@@ -192,7 +203,7 @@ fn main() {
                         continue;
                     }
                 };
-                let prev_counter = match parts.next() {
+                let prev_counter = match toks.next() {
                     Some(s) => match s.parse::<u64>() {
                         Ok(v) => v,
                         Err(_) => {
@@ -205,7 +216,12 @@ fn main() {
                         continue;
                     }
                 };
-                let value = match parts.next() {
+                let mut parts_for_value = line.splitn(5, ' ');
+                parts_for_value.next(); // cmd
+                parts_for_value.next(); // key
+                parts_for_value.next(); // prev_actor
+                parts_for_value.next(); // prev_counter
+                let value = match parts_for_value.next() {
                     Some(s) => s.as_bytes().to_vec(),
                     None => {
                         println!("missing <value>");
@@ -224,6 +240,8 @@ fn main() {
             }
             
             "rga_delete" => {
+                let mut parts = line.split_whitespace();
+                parts.next();
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
                     None => {
@@ -267,6 +285,8 @@ fn main() {
             }
             
             "rga_show" => {
+                let mut parts = line.split_whitespace();
+                parts.next();
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
                     None => {

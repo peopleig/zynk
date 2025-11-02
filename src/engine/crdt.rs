@@ -249,32 +249,105 @@ impl Rga {
         }
     }
 
+    // pub fn visible_sequence(&self) -> Vec<Vec<u8>> {
+    //     let mut children: BTreeMap<Option<ElementId>, Vec<ElementId>> = BTreeMap::new();
+    //     for (id, elem) in &self.elems {
+    //         children.entry(elem.prev).or_default().push(*id);
+    //     }
+    //     for vec in children.values_mut() {
+    //         vec.sort();
+    //     }
+
+    //     let mut out = Vec::new();
+    //     let mut q = VecDeque::new();
+    //     if let Some(heads) = children.get(&None) {
+    //         for id in heads { q.push_back(*id); }
+    //     }
+    //     while let Some(curr_id) = q.pop_front() {
+    //         if let Some(elem) = self.elems.get(&curr_id) {
+    //             if !elem.deleted {
+    //                 out.push(elem.value.clone());
+    //             }
+    //             if let Some(kids) = children.get(&Some(curr_id)) {
+    //                 for kid in kids { q.push_back(*kid); }
+    //             }
+    //         }
+    //     }
+    //     out
+    // }
+
+    // pub fn visible_sequence(&self) -> Vec<Vec<u8>> {
+    //     let mut children: BTreeMap<Option<ElementId>, Vec<ElementId>> = BTreeMap::new();
+    //     for (id, elem) in &self.elems {
+    //         children.entry(elem.prev).or_default().push(*id);
+    //     }
+    //     for vec in children.values_mut() { vec.sort(); }
+    
+    //     // FIX: Collect all roots (no parent OR missing parent)
+    //     let mut roots = Vec::new();
+    //     for (id, elem) in &self.elems {
+    //         if elem.prev.is_none() || !self.elems.contains_key(&elem.prev.unwrap()) {
+    //             roots.push(*id);
+    //         }
+    //     }
+    //     roots.sort();
+    
+    //     let mut out = Vec::new();
+    //     let mut q = VecDeque::new();
+    //     for r in roots { q.push_back(r); }
+    
+    //     while let Some(curr_id) = q.pop_front() {
+    //         if let Some(elem) = self.elems.get(&curr_id) {
+    //             if !elem.deleted {
+    //                 out.push(elem.value.clone());
+    //             }
+    //             if let Some(kids) = children.get(&Some(curr_id)) {
+    //                 for kid in kids {
+    //                     q.push_back(*kid);
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     out
+    // }
+
     pub fn visible_sequence(&self) -> Vec<Vec<u8>> {
+        // Build parent -> children map
         let mut children: BTreeMap<Option<ElementId>, Vec<ElementId>> = BTreeMap::new();
         for (id, elem) in &self.elems {
             children.entry(elem.prev).or_default().push(*id);
         }
+    
+        // Sort children deterministically (by ElementId)
         for vec in children.values_mut() {
             vec.sort();
         }
-
-        let mut out = Vec::new();
-        let mut q = VecDeque::new();
-        if let Some(heads) = children.get(&None) {
-            for id in heads { q.push_back(*id); }
-        }
-        while let Some(curr_id) = q.pop_front() {
-            if let Some(elem) = self.elems.get(&curr_id) {
-                if !elem.deleted {
-                    out.push(elem.value.clone());
-                }
-                if let Some(kids) = children.get(&Some(curr_id)) {
-                    for kid in kids { q.push_back(*kid); }
+    
+        // Depth-first traversal to ensure "insert after" order
+        fn visit(
+            curr: Option<ElementId>,
+            children: &BTreeMap<Option<ElementId>, Vec<ElementId>>,
+            elems: &BTreeMap<ElementId, Element>,
+            out: &mut Vec<Vec<u8>>,
+        ) {
+            if let Some(kids) = children.get(&curr) {
+                for id in kids {
+                    if let Some(elem) = elems.get(id) {
+                        if !elem.deleted {
+                            out.push(elem.value.clone());
+                        }
+                        visit(Some(*id), children, elems, out);
+                    }
                 }
             }
         }
+    
+        let mut out = Vec::new();
+        visit(None, &children, &self.elems, &mut out);
         out
     }
+
+
 
     pub fn merge(&mut self, other: &Self) {
         for (id, other_elem) in &other.elems {
