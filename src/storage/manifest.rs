@@ -24,12 +24,12 @@ impl Manifest {
     }
 
     pub fn record_add_table(&mut self, table_id: TableId) -> Result<()> {
-        writeln!(self.writer, "add {}", table_id)?;
+        writeln!(self.writer, "add {table_id}")?;
         self.sync()
     }
 
     pub fn record_remove_table(&mut self, table_id: TableId) -> Result<()> {
-        writeln!(self.writer, "remove {}", table_id)?;
+        writeln!(self.writer, "remove {table_id}")?;
         self.sync()
     }
 

@@ -1,6 +1,6 @@
 use super::table::{Entry, MemTable};
-use crate::storage::sstable::TableId;
 use crate::storage::sstable::builder::SsTableBuilder;
+use crate::storage::sstable::TableId;
 use std::path::Path;
 
 pub struct FlushResult {

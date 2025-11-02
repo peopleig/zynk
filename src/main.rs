@@ -1,7 +1,7 @@
 use input_handler::InputHandler;
 use std::path::PathBuf;
-use zynk::engine::kv::LsmEngine;
 use zynk::engine::crdt::ElementId;
+use zynk::engine::kv::LsmEngine;
 
 fn main() {
     let mut engine = LsmEngine::new_with_manifest("data", 64 * 1024, 8 * 1024).expect("engine");
@@ -26,15 +26,25 @@ fn main() {
                 parts.next(); // command
                 let k = match parts.next() {
                     Some(s) => s.as_bytes(),
-                    None => { println!("usage: put <key> <value>"); continue; }
+                    None => {
+                        println!("usage: put <key> <value>");
+                        continue;
+                    }
                 };
                 let v = match parts.next() {
                     Some(s) => s.as_bytes(),
-                    None => { println!("usage: put <key> <value>"); continue; }
+                    None => {
+                        println!("usage: put <key> <value>");
+                        continue;
+                    }
                 };
-                if let Err(e) = engine.put(k, v) { println!("error: {e}"); } else { println!("OK"); }
+                if let Err(e) = engine.put(k, v) {
+                    println!("error: {e}");
+                } else {
+                    println!("OK");
+                }
             }
-        
+
             "get" => {
                 let mut parts = line.split_whitespace();
                 parts.next();
@@ -54,7 +64,7 @@ fn main() {
                     Err(e) => println!("error: {e}"),
                 }
             }
-        
+
             "del" | "delete" => {
                 let mut parts = line.split_whitespace();
                 parts.next();
@@ -71,7 +81,7 @@ fn main() {
                     println!("1");
                 }
             }
-        
+
             "flush" => {
                 let mut parts = line.split_whitespace();
                 parts.next();
@@ -146,7 +156,7 @@ fn main() {
                 match engine.get(k) {
                     Ok(Some(v)) => {
                         println!("hex: {}", hex::encode(&v));
-                        println!("raw: {:?}", v);
+                        println!("raw: {v:?}");
                     }
                     Ok(None) => println!("(nil)"),
                     Err(e) => println!("error: {e}"),
@@ -179,14 +189,16 @@ fn main() {
                     println!("OK (id = actor:{} counter:{})", id.actor, id.counter);
                 }
             }
-            
+
             "rga_insert_after" => {
                 let mut toks = line.split_whitespace();
                 toks.next();
                 let k = match toks.next() {
                     Some(s) => s.as_bytes(),
                     None => {
-                        println!("usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>");
+                        println!(
+                            "usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>"
+                        );
                         continue;
                     }
                 };
@@ -199,7 +211,9 @@ fn main() {
                         }
                     },
                     None => {
-                        println!("usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>");
+                        println!(
+                            "usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>"
+                        );
                         continue;
                     }
                 };
@@ -212,7 +226,9 @@ fn main() {
                         }
                     },
                     None => {
-                        println!("usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>");
+                        println!(
+                            "usage: rga_insert_after <key> <prev_actor> <prev_counter> <value>"
+                        );
                         continue;
                     }
                 };
@@ -228,17 +244,21 @@ fn main() {
                         continue;
                     }
                 };
-            
-                let prev = Some(ElementId { actor: prev_actor, counter: prev_counter });
+
+                let prev = Some(ElementId {
+                    actor: prev_actor,
+                    counter: prev_counter,
+                });
                 let id = engine.next_element_id();
-            
-                if let Err(e) = engine.rga_insert_after(k, prev, value, engine.actor_id, id.counter) {
+
+                if let Err(e) = engine.rga_insert_after(k, prev, value, engine.actor_id, id.counter)
+                {
                     println!("error: {e}");
                 } else {
                     println!("OK (id = actor:{} counter:{})", id.actor, id.counter);
                 }
             }
-            
+
             "rga_delete" => {
                 let mut parts = line.split_whitespace();
                 parts.next();
@@ -275,15 +295,15 @@ fn main() {
                         continue;
                     }
                 };
-            
+
                 let id = ElementId { actor, counter };
                 if let Err(e) = engine.rga_delete(k, id) {
                     println!("error: {e}");
                 } else {
-                    println!("OK (deleted id = actor:{} counter:{})", actor, counter);
+                    println!("OK (deleted id = actor:{actor} counter:{counter})");
                 }
             }
-            
+
             "rga_show" => {
                 let mut parts = line.split_whitespace();
                 parts.next();
@@ -311,15 +331,12 @@ fn main() {
                 }
             }
 
-
-        
             "exit" | "quit" => {
                 println!("bye");
                 break;
             }
-        
+
             _ => println!("unknown command: {cmd}"),
         }
-
     }
 }

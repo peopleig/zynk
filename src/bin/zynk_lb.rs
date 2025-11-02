@@ -1,10 +1,10 @@
 use std::net::SocketAddr;
 use std::sync::{
-    Arc,
     atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 use tokio::sync::RwLock;
-use tonic::{Request, Response, Status, transport::Channel};
+use tonic::{transport::Channel, Request, Response, Status};
 
 pub mod pb {
     tonic::include_proto!("kv");
@@ -23,7 +23,7 @@ impl BackendPool {
     async fn new(endpoints: Vec<String>) -> Result<Self, Box<dyn std::error::Error>> {
         let mut clients = Vec::with_capacity(endpoints.len());
         for ep in endpoints {
-            let ch = Channel::from_shared(format!("http://{}", ep))?
+            let ch = Channel::from_shared(format!("http://{ep}"))?
                 .connect()
                 .await?;
             clients.push(Arc::new(RwLock::new(KvClient::new(ch))));
@@ -80,7 +80,7 @@ impl Kv for LbSvc {
 }
 
 fn map_status<E: std::fmt::Display>(e: E) -> Status {
-    Status::unavailable(format!("backend error: {}", e))
+    Status::unavailable(format!("backend error: {e}"))
 }
 
 #[tokio::main]
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(60051);
     let bind_ip = std::env::var("LB_BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let addr: SocketAddr = format!("{}:{}", bind_ip, port).parse()?;
+    let addr: SocketAddr = format!("{bind_ip}:{port}").parse()?;
 
     // Backends from env CSV (required)
     let peers = std::env::var("PEERS").unwrap_or_default();
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let pool = BackendPool::new(endpoints).await?;
 
-    println!("zynk-lb listening on {}", addr);
+    println!("zynk-lb listening on {addr}");
     tonic::transport::Server::builder()
         .add_service(KvServer::new(LbSvc { pool }))
         .serve(addr)

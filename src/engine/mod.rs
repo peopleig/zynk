@@ -1,2 +1,2 @@
-pub mod kv;
 pub mod crdt;
+pub mod kv;

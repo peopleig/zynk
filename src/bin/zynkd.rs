@@ -1,9 +1,7 @@
+use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::fs;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
 use zynk::engine::kv::LsmEngine;
@@ -59,7 +57,7 @@ fn get_or_create_actor_id(data_dir: &PathBuf) -> std::io::Result<u64> {
             return Ok(id);
         }
     }
-    use rand::{Rng, thread_rng};
+    use rand::{thread_rng, Rng};
     let id: u64 = thread_rng().gen();
     fs::write(&id_path, id.to_string())?;
     Ok(id)
@@ -76,11 +74,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(50051);
     let bind_ip = std::env::var("BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let addr: SocketAddr = format!("{}:{}", bind_ip, port).parse()?;
+    let addr: SocketAddr = format!("{bind_ip}:{port}").parse()?;
 
     let data_dir = PathBuf::from(std::env::var("DATA_DIR").unwrap_or_else(|_| "/data".to_string()));
     let node_id = std::env::var("NODE_ID").unwrap_or_else(|_| "node-unknown".to_string());
-   
+
     // derive actor id for this node:
     let actor_id = get_or_create_actor_id(&data_dir)?;
 

@@ -6,11 +6,19 @@ pub trait CRDT: Sized {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GSet {
-    elems: Vec<Vec<u8>>, 
+    elems: Vec<Vec<u8>>,
+}
+
+impl Default for GSet {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GSet {
-    pub fn new() -> Self { Self { elems: Vec::new() } }
+    pub fn new() -> Self {
+        Self { elems: Vec::new() }
+    }
 
     pub fn contains(&self, k: &[u8]) -> bool {
         self.elems.binary_search_by(|e| e.as_slice().cmp(k)).is_ok()
@@ -23,9 +31,13 @@ impl GSet {
         }
     }
 
-    pub fn len(&self) -> usize { self.elems.len() }
+    pub fn len(&self) -> usize {
+        self.elems.len()
+    }
 
-    pub fn iter(&self) -> impl Iterator<Item=&Vec<u8>> { self.elems.iter() }
+    pub fn iter(&self) -> impl Iterator<Item = &Vec<u8>> {
+        self.elems.iter()
+    }
 
     pub fn elements(&self) -> Vec<Vec<u8>> {
         self.elems.clone()
@@ -46,14 +58,22 @@ impl CRDT for GSet {
     fn from_bytes(bytes: &[u8]) -> Self {
         use std::convert::TryInto;
         let mut i = 0;
-        if bytes.len() < 4 { return GSet::new(); }
-        let cnt = u32::from_be_bytes(bytes[i..i+4].try_into().unwrap()) as usize; i += 4;
+        if bytes.len() < 4 {
+            return GSet::new();
+        }
+        let cnt = u32::from_be_bytes(bytes[i..i + 4].try_into().unwrap()) as usize;
+        i += 4;
         let mut elems = Vec::with_capacity(cnt);
         for _ in 0..cnt {
-            if i + 4 > bytes.len() { break; }
-            let l = u32::from_be_bytes(bytes[i..i+4].try_into().unwrap()) as usize; i += 4;
-            if i + l > bytes.len() { break; }
-            elems.push(bytes[i..i+l].to_vec());
+            if i + 4 > bytes.len() {
+                break;
+            }
+            let l = u32::from_be_bytes(bytes[i..i + 4].try_into().unwrap()) as usize;
+            i += 4;
+            if i + l > bytes.len() {
+                break;
+            }
+            elems.push(bytes[i..i + l].to_vec());
             i += l;
         }
         elems.sort();
@@ -63,21 +83,37 @@ impl CRDT for GSet {
 
     fn merge(&mut self, other: &Self) {
         let mut out = Vec::with_capacity(self.elems.len() + other.elems.len());
-        let mut a = &self.elems[..];
-        let mut b = &other.elems[..];
+        let a = &self.elems[..];
+        let b = &other.elems[..];
         let mut ia = 0usize;
         let mut ib = 0usize;
         while ia < a.len() && ib < b.len() {
             let av = &a[ia];
             let bv = &b[ib];
             match av.cmp(bv) {
-                std::cmp::Ordering::Less => { out.push(av.clone()); ia += 1; }
-                std::cmp::Ordering::Greater => { out.push(bv.clone()); ib += 1; }
-                std::cmp::Ordering::Equal => { out.push(av.clone()); ia += 1; ib += 1; }
+                std::cmp::Ordering::Less => {
+                    out.push(av.clone());
+                    ia += 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    out.push(bv.clone());
+                    ib += 1;
+                }
+                std::cmp::Ordering::Equal => {
+                    out.push(av.clone());
+                    ia += 1;
+                    ib += 1;
+                }
             }
         }
-        while ia < a.len() { out.push(a[ia].clone()); ia += 1; }
-        while ib < b.len() { out.push(b[ib].clone()); ib += 1; }
+        while ia < a.len() {
+            out.push(a[ia].clone());
+            ia += 1;
+        }
+        while ib < b.len() {
+            out.push(b[ib].clone());
+            ib += 1;
+        }
         self.elems = out;
     }
 }
@@ -86,7 +122,9 @@ impl CRDT for GSet {
 mod tests {
     use super::*;
 
-    fn b(v: &str) -> Vec<u8> { v.as_bytes().to_vec() }
+    fn b(v: &str) -> Vec<u8> {
+        v.as_bytes().to_vec()
+    }
 
     // Basic union test
     #[test]
@@ -116,17 +154,48 @@ mod tests {
         remote.insert(b("beta"));
         remote.insert(b("gamma"));
 
-        println!("Local before merge: {:?}",local.elements().iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>());
-        println!("Remote before merge: {:?}", remote.elements().iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>());
+        println!(
+            "Local before merge: {:?}",
+            local
+                .elements()
+                .iter()
+                .map(|v| String::from_utf8_lossy(v))
+                .collect::<Vec<_>>()
+        );
+        println!(
+            "Remote before merge: {:?}",
+            remote
+                .elements()
+                .iter()
+                .map(|v| String::from_utf8_lossy(v))
+                .collect::<Vec<_>>()
+        );
 
         let remote_bytes = remote.to_bytes();
-        println!("Remote serialized bytes (hex): {}", hex::encode(&remote_bytes));
+        println!(
+            "Remote serialized bytes (hex): {}",
+            hex::encode(&remote_bytes)
+        );
 
         let remote_deser = GSet::from_bytes(&remote_bytes);
-        println!("Remote deserialized: {:?}", remote_deser.elements().iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>());
+        println!(
+            "Remote deserialized: {:?}",
+            remote_deser
+                .elements()
+                .iter()
+                .map(|v| String::from_utf8_lossy(v))
+                .collect::<Vec<_>>()
+        );
 
         local.merge(&remote_deser);
-        println!("Local after merge: {:?}", local.elements().iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>());
+        println!(
+            "Local after merge: {:?}",
+            local
+                .elements()
+                .iter()
+                .map(|v| String::from_utf8_lossy(v))
+                .collect::<Vec<_>>()
+        );
 
         let expected = vec![b("alpha"), b("beta"), b("gamma")];
         assert_eq!(local.elements(), expected);
@@ -139,13 +208,17 @@ mod tests {
         // count = 4
         blob.extend(&(4u32.to_be_bytes()));
         // "z"
-        blob.extend(&(1u32.to_be_bytes())); blob.extend(b"z");
+        blob.extend(&(1u32.to_be_bytes()));
+        blob.extend(b"z");
         // "a"
-        blob.extend(&(1u32.to_be_bytes())); blob.extend(b"a");
+        blob.extend(&(1u32.to_be_bytes()));
+        blob.extend(b"a");
         // "a" duplicate
-        blob.extend(&(1u32.to_be_bytes())); blob.extend(b"a");
+        blob.extend(&(1u32.to_be_bytes()));
+        blob.extend(b"a");
         // "m"
-        blob.extend(&(1u32.to_be_bytes())); blob.extend(b"m");
+        blob.extend(&(1u32.to_be_bytes()));
+        blob.extend(b"m");
 
         let mut local = GSet::new();
         local.insert(b("b"));
@@ -158,8 +231,7 @@ mod tests {
     }
 }
 
-use std::collections::{BTreeMap, VecDeque};
-use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 /// Unique identifier for an RGA element: (actor, counter)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -169,7 +241,9 @@ pub struct ElementId {
 }
 
 impl ElementId {
-    pub fn new(actor: u64, counter: u64) -> Self { Self { actor, counter } }
+    pub fn new(actor: u64, counter: u64) -> Self {
+        Self { actor, counter }
+    }
 
     fn to_bytes(&self, out: &mut Vec<u8>) {
         out.extend(&self.actor.to_be_bytes());
@@ -177,7 +251,9 @@ impl ElementId {
     }
 
     fn from_bytes(bs: &[u8]) -> Option<(Self, usize)> {
-        if bs.len() < 16 { return None; }
+        if bs.len() < 16 {
+            return None;
+        }
         let actor = u64::from_be_bytes(bs[0..8].try_into().unwrap());
         let counter = u64::from_be_bytes(bs[8..16].try_into().unwrap());
         Some((ElementId { actor, counter }, 16))
@@ -196,8 +272,13 @@ impl Element {
     fn to_bytes(&self, out: &mut Vec<u8>) {
         self.id.to_bytes(out);
         match &self.prev {
-            Some(pid) => { out.push(1); pid.to_bytes(out); }
-            None => { out.push(0); }
+            Some(pid) => {
+                out.push(1);
+                pid.to_bytes(out);
+            }
+            None => {
+                out.push(0);
+            }
         }
         out.extend(&(self.value.len() as u32).to_be_bytes());
         out.extend(&self.value);
@@ -206,20 +287,44 @@ impl Element {
 
     fn from_bytes(bs: &[u8]) -> Option<(Self, usize)> {
         let mut i = 0usize;
-        let (id, n) = ElementId::from_bytes(&bs[i..])?; i += n;
-        if i >= bs.len() { return None; }
-        let has_prev = bs[i] == 1; i += 1;
+        let (id, n) = ElementId::from_bytes(&bs[i..])?;
+        i += n;
+        if i >= bs.len() {
+            return None;
+        }
+        let has_prev = bs[i] == 1;
+        i += 1;
         let prev = if has_prev {
-            let (pid, m) = ElementId::from_bytes(&bs[i..])?; i += m;
+            let (pid, m) = ElementId::from_bytes(&bs[i..])?;
+            i += m;
             Some(pid)
-        } else { None };
-        if i + 4 > bs.len() { return None; }
-        let vlen = u32::from_be_bytes(bs[i..i+4].try_into().unwrap()) as usize; i += 4;
-        if i + vlen > bs.len() { return None; }
-        let value = bs[i..i+vlen].to_vec(); i += vlen;
-        if i >= bs.len() { return None; }
-        let deleted = bs[i] != 0; i += 1;
-        Some((Element { id, prev, value, deleted }, i))
+        } else {
+            None
+        };
+        if i + 4 > bs.len() {
+            return None;
+        }
+        let vlen = u32::from_be_bytes(bs[i..i + 4].try_into().unwrap()) as usize;
+        i += 4;
+        if i + vlen > bs.len() {
+            return None;
+        }
+        let value = bs[i..i + vlen].to_vec();
+        i += vlen;
+        if i >= bs.len() {
+            return None;
+        }
+        let deleted = bs[i] != 0;
+        i += 1;
+        Some((
+            Element {
+                id,
+                prev,
+                value,
+                deleted,
+            },
+            i,
+        ))
     }
 }
 
@@ -229,8 +334,18 @@ pub struct Rga {
     pub elems: BTreeMap<ElementId, Element>,
 }
 
+impl Default for Rga {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Rga {
-    pub fn new() -> Self { Self { elems: BTreeMap::new() } }
+    pub fn new() -> Self {
+        Self {
+            elems: BTreeMap::new(),
+        }
+    }
 
     pub fn insert(&mut self, id: ElementId, prev: Option<ElementId>, value: Vec<u8>) {
         self.elems.entry(id).or_insert(Element {
@@ -245,7 +360,15 @@ impl Rga {
         if let Some(e) = self.elems.get_mut(&id) {
             e.deleted = true;
         } else {
-            self.elems.insert(id, Element { id, prev: None, value: Vec::new(), deleted: true });
+            self.elems.insert(
+                id,
+                Element {
+                    id,
+                    prev: None,
+                    value: Vec::new(),
+                    deleted: true,
+                },
+            );
         }
     }
 
@@ -313,35 +436,51 @@ impl Rga {
 
     pub fn from_bytes(bs: &[u8]) -> Self {
         let mut i = 0usize;
-        if bs.len() < 4 { return Rga::new(); }
-        let count = u32::from_be_bytes(bs[i..i+4].try_into().unwrap()) as usize; i += 4;
+        if bs.len() < 4 {
+            return Rga::new();
+        }
+        let count = u32::from_be_bytes(bs[i..i + 4].try_into().unwrap()) as usize;
+        i += 4;
         let mut elems = BTreeMap::new();
         for _ in 0..count {
-            if i >= bs.len() { break; }
+            if i >= bs.len() {
+                break;
+            }
             if let Some((elem, n)) = Element::from_bytes(&bs[i..]) {
                 elems.insert(elem.id, elem);
                 i += n;
-            } else { break; }
+            } else {
+                break;
+            }
         }
         Rga { elems }
     }
 }
 
 impl CRDT for Rga {
-    fn to_bytes(&self) -> Vec<u8> { self.to_bytes() }
-    fn from_bytes(bytes: &[u8]) -> Self { Rga::from_bytes(bytes) }
-    fn merge(&mut self, other: &Self) { self.merge(other) }
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_bytes()
+    }
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Rga::from_bytes(bytes)
+    }
+    fn merge(&mut self, other: &Self) {
+        self.merge(other)
+    }
 }
-
 
 #[cfg(test)]
 mod rga_tests {
     use super::*;
 
-    fn s(v: &str) -> Vec<u8> { v.as_bytes().to_vec() }
+    fn s(v: &str) -> Vec<u8> {
+        v.as_bytes().to_vec()
+    }
 
     fn show_seq(seq: &[Vec<u8>]) -> Vec<String> {
-        seq.iter().map(|b| String::from_utf8_lossy(b).to_string()).collect()
+        seq.iter()
+            .map(|b| String::from_utf8_lossy(b).to_string())
+            .collect()
     }
 
     #[test]
@@ -355,9 +494,15 @@ mod rga_tests {
 
         let b = ElementId::new(1, 2);
         r.insert(b, Some(a), s("B"));
-        println!("After insert B after A: {:?}", show_seq(&r.visible_sequence()));
+        println!(
+            "After insert B after A: {:?}",
+            show_seq(&r.visible_sequence())
+        );
 
-        assert_eq!(show_seq(&r.visible_sequence()), vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(
+            show_seq(&r.visible_sequence()),
+            vec!["A".to_string(), "B".to_string()]
+        );
     }
 
     #[test]
@@ -371,9 +516,15 @@ mod rga_tests {
         r.insert(id1, None, s("X"));
         r.insert(id2, None, s("Y"));
 
-        println!("Elements inserted at head: {:?}", show_seq(&r.visible_sequence()));
+        println!(
+            "Elements inserted at head: {:?}",
+            show_seq(&r.visible_sequence())
+        );
         // ordering by ElementId (actor then counter) -> id2 (actor1) before id1 (actor2)
-        assert_eq!(show_seq(&r.visible_sequence()), vec!["Y".to_string(), "X".to_string()]);
+        assert_eq!(
+            show_seq(&r.visible_sequence()),
+            vec!["Y".to_string(), "X".to_string()]
+        );
     }
 
     #[test]
@@ -390,9 +541,15 @@ mod rga_tests {
         println!("Before delete: {:?}", show_seq(&r.visible_sequence()));
 
         r.delete(b);
-        println!("After delete of 'two' (tombstoned): {:?}", show_seq(&r.visible_sequence()));
+        println!(
+            "After delete of 'two' (tombstoned): {:?}",
+            show_seq(&r.visible_sequence())
+        );
 
-        assert_eq!(show_seq(&r.visible_sequence()), vec!["one".to_string(), "three".to_string()]);
+        assert_eq!(
+            show_seq(&r.visible_sequence()),
+            vec!["one".to_string(), "three".to_string()]
+        );
     }
 
     #[test]
@@ -413,10 +570,16 @@ mod rga_tests {
 
         // merge r2 into r1
         r1.merge(&r2);
-        println!("r1 after merge r2->r1: {:?}", show_seq(&r1.visible_sequence()));
+        println!(
+            "r1 after merge r2->r1: {:?}",
+            show_seq(&r1.visible_sequence())
+        );
 
         // merge is commutative; resulting visible sequence deterministic by ElementId ordering:
-        assert_eq!(show_seq(&r1.visible_sequence()), vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(
+            show_seq(&r1.visible_sequence()),
+            vec!["A".to_string(), "B".to_string()]
+        );
     }
 
     #[test]
@@ -434,10 +597,16 @@ mod rga_tests {
         r2.delete(b1);
 
         println!("r1 before merge: {:?}", show_seq(&r1.visible_sequence()));
-        println!("r2 (tombstone) before merge: {:?}", show_seq(&r2.visible_sequence()));
+        println!(
+            "r2 (tombstone) before merge: {:?}",
+            show_seq(&r2.visible_sequence())
+        );
 
         r1.merge(&r2);
-        println!("r1 after merging tombstone: {:?}", show_seq(&r1.visible_sequence()));
+        println!(
+            "r1 after merging tombstone: {:?}",
+            show_seq(&r1.visible_sequence())
+        );
 
         assert_eq!(show_seq(&r1.visible_sequence()), vec!["A".to_string()]);
     }
@@ -447,15 +616,25 @@ mod rga_tests {
         println!("TEST: rga_serialize_roundtrip");
         let mut r = Rga::new();
         r.insert(ElementId::new(3, 1), None, s("alpha"));
-        r.insert(ElementId::new(3, 2), Some(ElementId::new(3,1)), s("beta"));
+        r.insert(ElementId::new(3, 2), Some(ElementId::new(3, 1)), s("beta"));
         println!("Original visible: {:?}", show_seq(&r.visible_sequence()));
 
         let bytes = r.to_bytes();
-        println!("Serialized bytes (len={}): {:02x?}", bytes.len(), &bytes[..std::cmp::min(bytes.len(), 64)]);
+        println!(
+            "Serialized bytes (len={}): {:02x?}",
+            bytes.len(),
+            &bytes[..std::cmp::min(bytes.len(), 64)]
+        );
         let r2 = Rga::from_bytes(&bytes);
-        println!("Deserialized visible: {:?}", show_seq(&r2.visible_sequence()));
+        println!(
+            "Deserialized visible: {:?}",
+            show_seq(&r2.visible_sequence())
+        );
 
-        assert_eq!(show_seq(&r.visible_sequence()), show_seq(&r2.visible_sequence()));
+        assert_eq!(
+            show_seq(&r.visible_sequence()),
+            show_seq(&r2.visible_sequence())
+        );
     }
 
     #[test]
@@ -482,6 +661,9 @@ mod rga_tests {
         println!("r1 after merge: {:?}", show_seq(&r1.visible_sequence()));
 
         // children of A are ids (1,2) and (2,1). Ordering: ElementId ord -> (1,2) then (2,1)
-        assert_eq!(show_seq(&r1.visible_sequence()), vec!["A".to_string(), "C".to_string(), "B".to_string()]);
+        assert_eq!(
+            show_seq(&r1.visible_sequence()),
+            vec!["A".to_string(), "C".to_string(), "B".to_string()]
+        );
     }
 }

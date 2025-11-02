@@ -1,5 +1,5 @@
 use super::TableId;
-use crate::storage::sstable::{FOOTER_SIZE, SSTABLE_MAGIC, SSTABLE_VERSION, index::Index};
+use crate::storage::sstable::{index::Index, FOOTER_SIZE, SSTABLE_MAGIC, SSTABLE_VERSION};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;

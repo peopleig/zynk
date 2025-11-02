@@ -1,11 +1,10 @@
-use crate::storage::manifest::{Manifest, fsync_dir, open_manifest_append, read_current_or_init};
-use crate::storage::memtable::{Entry, MemTable, MemTableSet, flush_memtable_to_sstable};
-use crate::storage::sstable::{TableId, reader::SsTableReader};
-use std::sync::atomic::{AtomicU64, Ordering};
-use crate::engine::crdt::{Rga,ElementId};
+use crate::engine::crdt::{ElementId, Rga};
+use crate::storage::manifest::{fsync_dir, open_manifest_append, read_current_or_init, Manifest};
+use crate::storage::memtable::{flush_memtable_to_sstable, Entry, MemTable, MemTableSet};
+use crate::storage::sstable::{reader::SsTableReader, TableId};
 use std::fs;
-use std::io::Result as IoResult;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub struct LsmEngine {
     data_dir: PathBuf,
@@ -130,7 +129,7 @@ impl LsmEngine {
         }
         Ok(())
     }
-    
+
     pub fn gset_add(&mut self, key: Vec<u8>, elem: Vec<u8>) -> std::io::Result<()> {
         use crate::engine::crdt::{GSet, CRDT};
 
@@ -205,7 +204,7 @@ impl LsmEngine {
 
         let id = ElementId::new(actor_id, counter);
         rga.insert(id, prev, value.clone());
-    
+
         // println!(
         //     "RGA INSERT -> key={}, id=({}:{}) prev={:?} value='{}'",
         //     String::from_utf8_lossy(key),
@@ -228,7 +227,6 @@ impl LsmEngine {
         self.put(key, &bytes)
     }
 
-
     pub fn rga_delete(&mut self, key: &[u8], id: ElementId) -> std::io::Result<()> {
         let mut rga = match self.get(key)? {
             Some(bs) => Rga::from_bytes(&bs),
@@ -247,8 +245,6 @@ impl LsmEngine {
             None => Ok(vec![]),
         }
     }
-
-
 
     fn flush_immutable(&mut self, frozen: MemTable) -> Result<(), std::io::Error> {
         let id = self.alloc_table_id();

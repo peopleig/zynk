@@ -1,5 +1,5 @@
-use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -9,7 +9,7 @@ fn gen_kv(n: usize, vlen: usize, seed: u64) -> Vec<(Vec<u8>, Vec<u8>)> {
     let mut rng = StdRng::seed_from_u64(seed);
     (0..n)
         .map(|i| {
-            let mut key = format!("key_{:08}", i).into_bytes();
+            let mut key = format!("key_{i:08}").into_bytes();
             // small randomization to avoid perfect locality
             key.push(rng.r#gen());
             let val = vec![b'x'; vlen];

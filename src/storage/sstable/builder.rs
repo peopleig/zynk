@@ -1,6 +1,6 @@
 use super::{BlockHandle, TableId};
 use crate::storage::sstable::{
-    FOOTER_SIZE, SSTABLE_MAGIC, SSTABLE_VERSION, block::DataBlock, index::Index,
+    block::DataBlock, index::Index, FOOTER_SIZE, SSTABLE_MAGIC, SSTABLE_VERSION,
 };
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
